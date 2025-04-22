@@ -440,7 +440,8 @@ function toggleSequenceMode(processIndex) {
 // Replace the entire moveToNextSubprocess function with this improved version
 function moveToNextSubprocess(processIndex) {
   const process = state.processes[processIndex];
-  
+  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+
   // Ensure sequence mode is enabled
   if (!process.sequenceMode) {
     console.log("Sequence mode not enabled, can't move to next");
@@ -558,6 +559,8 @@ function moveToNextSubprocess(processIndex) {
   
   // Re-render the entire interface to show the new active subprocess
   renderInterface();
+
+  window.scrollTo(0, scrollPosition);
 }
 
 
@@ -1025,6 +1028,65 @@ function updateSubprocessTimerDisplay(processIndex, subprocessIndex) {
   updateButtonUI(processIndex, subprocessIndex);
 }
 
+// Add this function to create a fixed-height scrollable container for recordings
+function addScrollableContainerStyles() {
+  if (document.getElementById('scrollable-container-styles')) return;
+  
+  const style = document.createElement('style');
+  style.id = 'scrollable-container-styles';
+  style.textContent = `
+    .recorded-times-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      background-color: #f9fafb;
+    }
+    
+    .mobile-recorded-times-container {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background-color: #f9fafb;
+      margin: 10px 0;
+      padding: 10px;
+    }
+    
+    /* Make sure the scrollbar looks nice on different browsers */
+    .recorded-times-container::-webkit-scrollbar,
+    .mobile-recorded-times-container::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .recorded-times-container::-webkit-scrollbar-track,
+    .mobile-recorded-times-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    
+    .recorded-times-container::-webkit-scrollbar-thumb,
+    .mobile-recorded-times-container::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    
+    .recorded-times-container::-webkit-scrollbar-thumb:hover,
+    .mobile-recorded-times-container::-webkit-scrollbar-thumb:hover {
+      background: #a1a1a1;
+    }
+    
+    /* Add a fixed position footer for mobile */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 70px !important; /* Space for the action bar */
+      }
+    }
+  `;
+  
+  document.head.appendChild(style);
+}
 
 // Function to record subprocess time when timer is stopped
 function recordSubprocessTime(processIndex, subprocessIndex) {
@@ -1409,6 +1471,7 @@ function autoBackup() {
 
 function recordLap(processIndex, subprocessIndex) {
   const process = state.processes[processIndex];
+  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
   const subprocess = process.subprocesses[subprocessIndex];
   
   // Not running? Return and log
@@ -1469,9 +1532,13 @@ function recordLap(processIndex, subprocessIndex) {
   
   // Log success
   console.log("Lap recorded successfully");
+
+ 
   
   // Update UI
   renderInterface();
+
+  window.scrollTo(0, scrollPosition);
 }
 
 // Record a lap for a subprocess
@@ -1772,6 +1839,12 @@ function renderRecordedTimes() {
   
   // Only show the container if there are readings
   recordedTimesContainer.style.display = hasReadings ? 'block' : 'none';
+  
+  // Make sure the recorded times table is inside a scrollable container
+  const tableContainer = document.querySelector('.recorded-times');
+  if (tableContainer) {
+    tableContainer.className = 'recorded-times recorded-times-container';
+  }
 }
 
 // Render mobile card-based view with individual subprocess timers
@@ -2133,7 +2206,7 @@ function addUnifiedControlStyles() {
 // Create a card for recorded times
 function createRecordedTimesCard() {
   const card = document.createElement('div');
-  card.className = 'recorded-times-card';
+  card.className = 'recorded-times-card mobile-recorded-times-container';
   
   let html = '';
   
@@ -3390,6 +3463,8 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Add sequence styles
   addSequenceStylesIfNeeded();
+
+  addScrollableContainerStyles();
   
   // Initialize sequence mode for existing processes if needed
   state.processes.forEach(process => {
