@@ -411,37 +411,39 @@ function toggleSequenceMode(processIndex) {
   const process = state.processes[processIndex];
   process.sequenceMode = !process.sequenceMode;
   
-  // Reset current sequence index when toggling
-  process.currentSequenceIndex = -1;
-  
-  // If enabling sequence mode, make sure no subprocess timers are running
+  // If enabling sequence mode
   if (process.sequenceMode) {
+    // Initialize sequence index to first subprocess (0) instead of -1
+    // This will make the first subprocess ready for timing immediately
+    process.currentSequenceIndex = 0;
+    
     // Stop any running subprocess timers
     process.subprocesses.forEach((subprocess, subprocessIndex) => {
       if (subprocess.timerRunning) {
         stopSubprocessTimer(processIndex, subprocessIndex, true);
       }
     });
-  }
-  
-  // Re-render interface to update UI
-  renderInterface();
-  saveToLocalStorage();
-  
-  // Show appropriate notification
-  if (process.sequenceMode) {
-    showNotification(`Sequence Mode enabled for "${process.name}" - Press Start then Next to begin`);
+    
+    // Highlight the first subprocess as active
+    state.activeProcess = processIndex;
+    state.activeSubprocess = 0;
+    
+    showNotification(`Sequence Mode enabled for "${process.name}" - Press Start to begin`);
   } else {
+    // When disabling, clear the current sequence
+    process.currentSequenceIndex = -1;
     showNotification(`Sequence Mode disabled for "${process.name}"`);
   }
+  
+  renderInterface();
+  saveToLocalStorage();
 }
 
 
 // Replace the entire moveToNextSubprocess function with this improved version
 function moveToNextSubprocess(processIndex) {
   const process = state.processes[processIndex];
-  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
-
+  
   // Ensure sequence mode is enabled
   if (!process.sequenceMode) {
     console.log("Sequence mode not enabled, can't move to next");
@@ -454,63 +456,77 @@ function moveToNextSubprocess(processIndex) {
     return;
   }
   
+  // Save the current scroll position
+  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+  
   // Get current sequence index
   let currentIndex = process.currentSequenceIndex;
   
   // Get the exact current time for consistency
   const exactTransitionTime = Date.now();
   
-  // Process the current timer if it exists and is running
-  if (currentIndex >= 0 && currentIndex < process.subprocesses.length) {
+  // Special handling for first subprocess in sequence
+  // Check if the current subprocess timer is actually running
+  const isCurrentTimerRunning = currentIndex >= 0 && 
+                               currentIndex < process.subprocesses.length && 
+                               process.subprocesses[currentIndex].timerRunning;
+  
+  // Only record time if there's an active running timer
+  if (isCurrentTimerRunning) {
     const currentSubprocess = process.subprocesses[currentIndex];
     
-    if (currentSubprocess.timerRunning) {
-      // Save form data
-      captureSubprocessFormData(processIndex, currentIndex);
-      
-      // Calculate exact elapsed time with current timestamp
-      const elapsedTime = exactTransitionTime - currentSubprocess.startTime;
-      
-      // Record the current time
-      const endTime = new Date(exactTransitionTime);
-      const startTime = new Date(currentSubprocess.startTime);
-      
-      const reading = {
-        process: process.name,
-        subprocess: currentSubprocess.name,
-        time: elapsedTime,
-        formattedTime: formatTime(elapsedTime),
-        timestamp: new Date().toISOString(),
-        activityType: currentSubprocess.activityType || "",
-        remarks: currentSubprocess.remarks || "",
-        personCount: currentSubprocess.personCount || 1,
-        productionQty: currentSubprocess.productionQty || 0,
-        rating: currentSubprocess.rating || 100,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        formattedStartTime: formatDateTime(startTime),
-        formattedEndTime: formatDateTime(endTime)
-      };
-      
-      if (!process.readings) {
-        process.readings = [];
-      }
-      
-      process.readings.push(reading);
-      
-      // Update subprocess display time
-      currentSubprocess.time = elapsedTime;
-      currentSubprocess.formattedTime = formatTime(elapsedTime);
-      
-      // Show notification
-      showNotification(`Time recorded: ${formatTime(elapsedTime)}`);
-      
-      // Explicitly stop the current subprocess timer
-      clearInterval(currentSubprocess.timerIntervalId);
-      currentSubprocess.timerIntervalId = null;
-      currentSubprocess.timerRunning = false;
-      
-      console.log(`Recorded time for subprocess ${currentIndex}: ${formatTime(elapsedTime)}`);
+    // Save form data
+    captureSubprocessFormData(processIndex, currentIndex);
+    
+    // Calculate exact elapsed time with current timestamp
+    const elapsedTime = exactTransitionTime - currentSubprocess.startTime;
+    
+    // Record the current time
+    const endTime = new Date(exactTransitionTime);
+    const startTime = new Date(currentSubprocess.startTime);
+    
+    const reading = {
+      process: process.name,
+      subprocess: currentSubprocess.name,
+      time: elapsedTime,
+      formattedTime: formatTime(elapsedTime),
+      timestamp: new Date().toISOString(),
+      activityType: currentSubprocess.activityType || "",
+      remarks: currentSubprocess.remarks || "",
+      personCount: currentSubprocess.personCount || 1,
+      productionQty: currentSubprocess.productionQty || 0,
+      rating: currentSubprocess.rating || 100,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      formattedStartTime: formatDateTime(startTime),
+      formattedEndTime: formatDateTime(endTime)
+    };
+    
+    if (!process.readings) {
+      process.readings = [];
+    }
+    
+    process.readings.push(reading);
+    
+    // Update subprocess display time
+    currentSubprocess.time = elapsedTime;
+    currentSubprocess.formattedTime = formatTime(elapsedTime);
+    
+    // Show notification
+    showNotification(`Time recorded: ${formatTime(elapsedTime)}`);
+    
+    // Explicitly stop the current subprocess timer
+    clearInterval(currentSubprocess.timerIntervalId);
+    currentSubprocess.timerIntervalId = null;
+    currentSubprocess.timerRunning = false;
+    
+    console.log(`Recorded time for subprocess ${currentIndex}: ${formatTime(elapsedTime)}`);
+  } else {
+    console.log("No active timer running, moving to next without recording");
+    
+    // If no timer was running, just show a notification
+    if (currentIndex >= 0 && currentIndex < process.subprocesses.length) {
+      showNotification(`Moving to next subprocess without recording (no active timer)`);
     }
   }
   
@@ -559,7 +575,8 @@ function moveToNextSubprocess(processIndex) {
   
   // Re-render the entire interface to show the new active subprocess
   renderInterface();
-
+  
+  // Restore scroll position after rendering
   window.scrollTo(0, scrollPosition);
 }
 
