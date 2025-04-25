@@ -27,6 +27,8 @@ window.addEventListener('resize', debounce(function() {
 
 
 function fixMobileInputs() {
+  if (document.getElementById('mobile-input-fixes')) return;
+  
   // Add special styles for mobile inputs
   const mobileInputStyle = document.createElement('style');
   mobileInputStyle.id = 'mobile-input-fixes';
@@ -35,38 +37,39 @@ function fixMobileInputs() {
     input, select, textarea {
       touch-action: manipulation;
       -webkit-touch-callout: none;
-      -webkit-user-select: text;
-      user-select: text;
-      -webkit-tap-highlight-color: rgba(0,0,0,0);
-    }
-    
-    /* Increase tap target size */
-    .subprocess-inputs input,
-    .subprocess-inputs select {
-      min-height: 44px;
       font-size: 16px !important; /* Prevents iOS zoom on focus */
+      height: auto;
+      min-height: 44px;
     }
     
-    /* Ensure inputs are above other elements */
-    .subprocess-inputs input:focus,
-    .subprocess-inputs select:focus {
-      position: relative;
-      z-index: 100;
+    /* Increase contrast for better visibility */
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+      outline: none !important;
     }
     
-    /* Prevent scrolling when input is focused */
-    body.input-focused {
-      position: fixed;
-      width: 100%;
-      height: 100%;
+    /* Ensure the action bar stays at the bottom */
+    .mobile-action-bar {
+      bottom: 0 !important;
+      position: fixed !important;
+      z-index: 999 !important;
+    }
+    
+    /* Add padding to the bottom of the page to prevent inputs from being hidden */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 100px !important;
+      }
     }
   `;
   document.head.appendChild(mobileInputStyle);
   
-  // Apply global event listeners to fix focus issues
+  // Apply global event listener once
   document.addEventListener('touchstart', function(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
-      // Prevent any parent handlers from capturing this event
+    const target = e.target;
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+      // Just stop propagation to prevent other handlers from interfering
       e.stopPropagation();
     }
   }, true);
@@ -149,30 +152,18 @@ let isMobile = window.innerWidth <= 768;
 
 // Check for mobile on resize
 window.addEventListener('resize', debounce(function() {
-  // Save the current scroll position
-  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
-  
-  // Check if the view mode changed (mobile/desktop)
+  // Check if we actually changed between mobile and desktop
   const wasMobile = isMobile;
   isMobile = window.innerWidth <= 768;
   
-  // If changed between mobile and desktop, save form data first
+  // Only re-render if the mode actually changed
   if (wasMobile !== isMobile) {
-    // Save all form data before switching views
+    // Save form data before switching views
     captureAllFormData();
     // Then render the new interface
     renderInterface();
   }
-  
-  // Remove any fixed positioning when keyboard appears (changes window height)
-  if (document.body.classList.contains('input-focused') && 
-      window.innerHeight < window.innerWidth) {
-    document.body.classList.remove('input-focused');
-  }
-  
-  // Restore scroll position after rendering
-  window.scrollTo(0, scrollPosition);
-}, 250)); // 250ms debounce time
+}, 250));
 
 
 // Function to check local storage usage and limits
@@ -409,6 +400,46 @@ function addStorageIndicatorStyles() {
   `;
   
   document.head.appendChild(style);
+}
+
+function inputTouchHandler(e) {
+  // Only stop propagation, don't prevent default or it breaks focusing
+  e.stopPropagation();
+}
+
+function inputFocusHandler() {
+  // Prevent recursive focus handling
+  if (isHandlingFocus) return;
+  isHandlingFocus = true;
+  
+  try {
+    // Check if the element needs scrolling into view
+    const rect = this.getBoundingClientRect();
+    const isVisible = (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= window.innerHeight &&
+      rect.right <= window.innerWidth
+    );
+    
+    if (!isVisible) {
+      // Only scroll if not already visible
+      const targetY = window.pageYOffset + rect.top - 150;
+      window.scrollTo({
+        top: targetY,
+        behavior: 'smooth'
+      });
+    }
+  } finally {
+    // Always reset the flag
+    setTimeout(() => {
+      isHandlingFocus = false;
+    }, 100);
+  }
+}
+
+function inputBlurHandler() {
+  // No actions on blur to avoid loops
 }
 
 // Initialize and set up periodic updates
@@ -1937,11 +1968,8 @@ function renderMobileView() {
     return;
   }
   
-  // Save current focused element and its position for restoration after rendering
-  const focusedElement = document.querySelector(':focus');
-  const focusedElementId = focusedElement ? focusedElement.id : null;
-  const focusPosition = focusedElement ? 
-    focusedElement.getBoundingClientRect().top + window.pageYOffset : 0;
+  // Save current scroll position
+  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
   
   mobileView.innerHTML = '';
   
@@ -1981,63 +2009,23 @@ function renderMobileView() {
     mobileView.appendChild(recordedTimesCard);
   }
   
-  // After rendering is complete, ensure any previously focused inputs remain accessible
-  setTimeout(() => {
-    // Try to restore focus if we had a focused element
-    if (focusedElementId) {
-      const elementToFocus = document.getElementById(focusedElementId);
-      if (elementToFocus) {
-        elementToFocus.focus();
-        
-        // Scroll to a similar position where the element was before
-        window.scrollTo({
-          top: focusPosition,
-          behavior: 'auto'
-        });
-      }
-    }
+  // Simple touch handling that won't cause infinite loops
+  const allInputs = mobileView.querySelectorAll('input, select, textarea');
+  allInputs.forEach(input => {
+    // Remove any existing event listeners first to prevent duplicates
+    input.removeEventListener('touchstart', inputTouchHandler);
+    input.removeEventListener('focus', inputFocusHandler);
+    input.removeEventListener('blur', inputBlurHandler);
     
-    // Additionally, check if any element is currently focused
-    const currentlyFocused = document.querySelector(':focus');
-    if (currentlyFocused && (currentlyFocused.tagName === 'INPUT' || 
-                            currentlyFocused.tagName === 'SELECT' || 
-                            currentlyFocused.tagName === 'TEXTAREA')) {
-      // Ensure it's visible with some spacing above
-      const rect = currentlyFocused.getBoundingClientRect();
-      if (rect.top < 100 || rect.bottom > window.innerHeight - 100) {
-        currentlyFocused.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center'
-        });
-      }
-    }
-    
-    // Apply touch event handlers to all input fields
-    const allInputs = mobileView.querySelectorAll('input, select, textarea');
-    allInputs.forEach(input => {
-      // Ensure proper focus handling
-      input.addEventListener('touchstart', function(e) {
-        e.stopPropagation(); // Prevent event bubbling
-      });
-      
-      // Fix iOS focus issues
-      input.addEventListener('focus', function() {
-        // Scroll the element into view with some padding
-        const rect = this.getBoundingClientRect();
-        const scrollY = window.scrollY + rect.top - 150; // 150px padding above
-        window.scrollTo(0, scrollY);
-        
-        // Add class to body to prevent background scrolling
-        document.body.classList.add('input-focused');
-      });
-      
-      input.addEventListener('blur', function() {
-        // Remove the class when input loses focus
-        document.body.classList.remove('input-focused');
-      });
-    });
-  }, 100);
+    // Add the new event listeners
+    input.addEventListener('touchstart', inputTouchHandler);
+  });
+  
+  // Restore scroll position
+  window.scrollTo(0, scrollPosition);
 }
+
+let isHandlingFocus = false;
 
 // Modify createProcessCard to display subprocesses in ascending order
 function createProcessCard(process, processIndex) {
@@ -2646,21 +2634,14 @@ function showModal(title, content) {
   `;
   
   modal.style.display = 'block';
+  
+  // Focus any input with a simple approach that won't cause loops
   setTimeout(() => {
-    const modalInputs = modal.querySelectorAll('input, select, textarea');
-    if (modalInputs.length > 0) {
-      // Focus the first input with a delay
-      setTimeout(() => {
-        modalInputs[0].focus();
-        
-        // Ensure the input is visible
-        const rect = modalInputs[0].getBoundingClientRect();
-        if (rect.bottom > window.innerHeight) {
-          modalInputs[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 300);
+    const firstInput = modal.querySelector('input, select, textarea');
+    if (firstInput) {
+      firstInput.focus();
     }
-  }, 100);
+  }, 300);
 }
 
 // Close modal
