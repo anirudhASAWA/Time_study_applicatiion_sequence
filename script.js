@@ -2485,9 +2485,18 @@ function createSubprocessCard(process, processIndex, subprocess, subprocessIndex
   `;
   actionRow.appendChild(deleteButtons);
   
-  card.appendChild(actionRow);
+  card.appendChild(form);
   
   return card;
+}
+
+function fixSubprocessInputs() {
+  // Add this global handler instead of individual ones
+  document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+      // Don't add any special handling, let the browser handle it naturally
+    }
+  });
 }
 
 
@@ -3928,6 +3937,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (exportBtn) {
     exportBtn.addEventListener('click', exportToExcel);
   }
+  
+  fixSubprocessInputs();
   
   const mobileExportBtn = document.getElementById('mobileExportBtn');
   if (mobileExportBtn) {
