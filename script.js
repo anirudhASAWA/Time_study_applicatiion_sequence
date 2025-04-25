@@ -27,53 +27,127 @@ window.addEventListener('resize', debounce(function() {
 
 
 function fixMobileInputs() {
-  if (document.getElementById('mobile-input-fixes')) return;
-  
-  // Add special styles for mobile inputs
-  const mobileInputStyle = document.createElement('style');
-  mobileInputStyle.id = 'mobile-input-fixes';
-  mobileInputStyle.textContent = `
-    /* Ensure inputs are properly interactive on mobile */
-    input, select, textarea {
-      touch-action: manipulation;
-      -webkit-touch-callout: none;
-      font-size: 16px !important; /* Prevents iOS zoom on focus */
-      height: auto;
-      min-height: 44px;
-    }
-    
-    /* Increase contrast for better visibility */
-    input:focus, select:focus, textarea:focus {
-      border-color: #3b82f6 !important;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
-      outline: none !important;
-    }
-    
-    /* Ensure the action bar stays at the bottom */
-    .mobile-action-bar {
-      bottom: 0 !important;
-      position: fixed !important;
-      z-index: 999 !important;
-    }
-    
-    /* Add padding to the bottom of the page to prevent inputs from being hidden */
-    @media (max-width: 768px) {
-      body {
-        padding-bottom: 100px !important;
+  // Add special styles for mobile inputs only if they haven't been added yet
+  if (!document.getElementById('mobile-input-fixes')) {
+    const mobileInputStyle = document.createElement('style');
+    mobileInputStyle.id = 'mobile-input-fixes';
+    mobileInputStyle.textContent = `
+      /* Ensure inputs are properly interactive on mobile */
+      input, select, textarea {
+        touch-action: manipulation;
+        -webkit-touch-callout: none;
+        font-size: 16px !important; /* Prevents iOS zoom on focus */
+        height: auto;
+        min-height: 44px;
       }
-    }
-  `;
-  document.head.appendChild(mobileInputStyle);
+      
+      /* Increase contrast for better visibility */
+      input:focus, select:focus, textarea:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+        outline: none !important;
+      }
+      
+      /* Prevent iOS from zooming on input */
+      @media screen and (-webkit-min-device-pixel-ratio:0) { 
+        select,
+        textarea,
+        input {
+          font-size: 16px !important;
+        }
+      }
+      
+      /* Add padding at bottom to ensure fields aren't hidden by keyboard */
+      body.keyboard-open {
+        padding-bottom: 250px !important;
+      }
+      
+      /* Prevent scrolling of the background when keyboard is open */
+      body.input-active {
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+      }
+    `;
+    document.head.appendChild(mobileInputStyle);
+  }
+
+  // Remove any existing event listeners to prevent duplicates
+  const inputs = document.querySelectorAll('input, select, textarea');
+  inputs.forEach(input => {
+    input.removeEventListener('focus', handleInputFocus);
+    input.removeEventListener('blur', handleInputBlur);
+    input.removeEventListener('touchstart', handleInputTouch);
+  });
   
-  // Apply global event listener once
-  document.addEventListener('touchstart', function(e) {
-    const target = e.target;
-    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
-      // Just stop propagation to prevent other handlers from interfering
-      e.stopPropagation();
-    }
-  }, true);
+  // Add improved event listeners for proper mobile input handling
+  inputs.forEach(input => {
+    input.addEventListener('focus', handleInputFocus);
+    input.addEventListener('blur', handleInputBlur);
+    input.addEventListener('touchstart', handleInputTouch);
+  });
+  
+  // Global event listener for document touch to prevent interference
+  document.removeEventListener('touchstart', documentTouchHandler);
+  document.addEventListener('touchstart', documentTouchHandler, { passive: true });
 }
+
+// Handler for input focus
+function handleInputFocus(e) {
+  // Prevent recursive handling
+  if (window.isHandlingFocus) return;
+  window.isHandlingFocus = true;
+  
+  try {
+    // Add class to body for keyboard handling
+    document.body.classList.add('keyboard-open');
+    
+    // Apply specific styling for active input
+    this.style.backgroundColor = '#ffffff';
+    
+    // Get the current input position
+    const rect = this.getBoundingClientRect();
+    
+    // Scroll to make the input visible with enough space above for context
+    // Delay the scrolling to ensure it happens after the keyboard appears
+    setTimeout(() => {
+      const scrollPosition = window.scrollY + rect.top - 150;
+      window.scrollTo({
+        top: scrollPosition,
+        behavior: 'smooth'
+      });
+    }, 300);
+  } finally {
+    // Reset handling flag
+    setTimeout(() => {
+      window.isHandlingFocus = false;
+    }, 300);
+  }
+}
+
+function handleInputBlur() {
+  // Remove keyboard handling class after a delay
+  // The delay ensures the form isn't immediately changed when switching between inputs
+  setTimeout(() => {
+    // Check if any input is still focused before removing class
+    if (!document.activeElement || 
+        (document.activeElement.tagName !== 'INPUT' && 
+         document.activeElement.tagName !== 'SELECT' && 
+         document.activeElement.tagName !== 'TEXTAREA')) {
+      document.body.classList.remove('keyboard-open');
+    }
+  }, 100);
+}
+
+function handleInputTouch(e) {
+  // Don't prevent default here as it would prevent normal focus
+  // Just stop propagation to prevent other handlers from interfering
+  e.stopPropagation();
+}
+
+
+
 
 
 // Add this function to capture all form data before view changes
@@ -522,6 +596,55 @@ document.addEventListener('DOMContentLoaded', function() {
 
   addUnifiedControlStyles();
 });
+
+function documentTouchHandler(e) {
+  // If touching anywhere other than an input, prevent focus loss
+  // but only if we have an active input
+  if (document.activeElement && 
+      (document.activeElement.tagName === 'INPUT' || 
+       document.activeElement.tagName === 'SELECT' || 
+       document.activeElement.tagName === 'TEXTAREA')) {
+    
+    // Check if touch is outside inputs
+    if (e.target.tagName !== 'INPUT' && 
+        e.target.tagName !== 'SELECT' && 
+        e.target.tagName !== 'TEXTAREA' && 
+        !e.target.closest('input, select, textarea')) {
+      
+      // Don't call preventDefault as it makes the app feel unresponsive
+      // Instead, re-focus the active element if needed
+      if (document.activeElement && document.activeElement.tagName) {
+        // Re-focus with a slight delay
+        const activeElement = document.activeElement;
+        setTimeout(() => {
+          activeElement.focus();
+        }, 10);
+      }
+    }
+  }
+}
+
+function refreshInputHandlers() {
+  // Apply the fixes to any new inputs
+  fixMobileInputs();
+  
+  // Watch for DOM mutations to catch dynamically added inputs
+  if (!window.inputObserver) {
+    window.inputObserver = new MutationObserver(mutations => {
+      mutations.forEach(mutation => {
+        if (mutation.addedNodes.length) {
+          fixMobileInputs();
+        }
+      });
+    });
+    
+    window.inputObserver.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+  }
+}
+
 
 
 
@@ -1041,10 +1164,46 @@ function captureSubprocessFormData(processIndex, subprocessIndex) {
     if (ratingElement) {
       subprocess.rating = parseInt(ratingElement.value) || 100;
     }
+    
+    // Save to localStorage to ensure data isn't lost
+    saveToLocalStorage();
   } catch (error) {
     console.error("Error capturing form data:", error);
   }
 }
+
+// Initialize the improved input handling
+document.addEventListener('DOMContentLoaded', function() {
+  // Apply initial fixes
+  fixMobileInputs();
+  
+  // Set up observer for dynamic content
+  refreshInputHandlers();
+  
+  // Handle iOS-specific issues
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    // Fix for iOS keyboard issues
+    window.addEventListener('focusin', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        document.body.classList.add('keyboard-open');
+      }
+    });
+    
+    window.addEventListener('focusout', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        // Only remove if no other input is focused
+        setTimeout(() => {
+          if (!document.activeElement || 
+              (document.activeElement.tagName !== 'INPUT' && 
+               document.activeElement.tagName !== 'SELECT' && 
+               document.activeElement.tagName !== 'TEXTAREA')) {
+            document.body.classList.remove('keyboard-open');
+          }
+        }, 50);
+      }
+    });
+  }
+});
 
 
 // Start edit process
