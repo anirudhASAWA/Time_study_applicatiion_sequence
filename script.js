@@ -25,6 +25,57 @@ window.addEventListener('resize', debounce(function() {
   }
 }, 250)); // 250ms debounce time
 
+
+function fixMobileInputs() {
+  if (document.getElementById('mobile-input-fixes')) return;
+  
+  // Add special styles for mobile inputs
+  const mobileInputStyle = document.createElement('style');
+  mobileInputStyle.id = 'mobile-input-fixes';
+  mobileInputStyle.textContent = `
+    /* Ensure inputs are properly interactive on mobile */
+    input, select, textarea {
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      font-size: 16px !important; /* Prevents iOS zoom on focus */
+      height: auto;
+      min-height: 44px;
+    }
+    
+    /* Increase contrast for better visibility */
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+      outline: none !important;
+    }
+    
+    /* Ensure the action bar stays at the bottom */
+    .mobile-action-bar {
+      bottom: 0 !important;
+      position: fixed !important;
+      z-index: 999 !important;
+    }
+    
+    /* Add padding to the bottom of the page to prevent inputs from being hidden */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 100px !important;
+      }
+    }
+  `;
+  document.head.appendChild(mobileInputStyle);
+  
+  // Apply global event listener once
+  document.addEventListener('touchstart', function(e) {
+    const target = e.target;
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+      // Just stop propagation to prevent other handlers from interfering
+      e.stopPropagation();
+    }
+  }, true);
+}
+
+
 // Add this function to capture all form data before view changes
 function captureAllFormData() {
   // Loop through all processes and subprocesses to capture form data
@@ -100,15 +151,19 @@ const mobileSetupBtn = document.getElementById('mobileSetupBtn');
 let isMobile = window.innerWidth <= 768;
 
 // Check for mobile on resize
-window.addEventListener('resize', function() {
+window.addEventListener('resize', debounce(function() {
+  // Check if we actually changed between mobile and desktop
   const wasMobile = isMobile;
   isMobile = window.innerWidth <= 768;
   
-  // If changed between mobile and desktop, re-render
+  // Only re-render if the mode actually changed
   if (wasMobile !== isMobile) {
+    // Save form data before switching views
+    captureAllFormData();
+    // Then render the new interface
     renderInterface();
   }
-});
+}, 250));
 
 
 // Function to check local storage usage and limits
@@ -345,6 +400,46 @@ function addStorageIndicatorStyles() {
   `;
   
   document.head.appendChild(style);
+}
+
+function inputTouchHandler(e) {
+  // Only stop propagation, don't prevent default or it breaks focusing
+  e.stopPropagation();
+}
+
+function inputFocusHandler() {
+  // Prevent recursive focus handling
+  if (isHandlingFocus) return;
+  isHandlingFocus = true;
+  
+  try {
+    // Check if the element needs scrolling into view
+    const rect = this.getBoundingClientRect();
+    const isVisible = (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= window.innerHeight &&
+      rect.right <= window.innerWidth
+    );
+    
+    if (!isVisible) {
+      // Only scroll if not already visible
+      const targetY = window.pageYOffset + rect.top - 150;
+      window.scrollTo({
+        top: targetY,
+        behavior: 'smooth'
+      });
+    }
+  } finally {
+    // Always reset the flag
+    setTimeout(() => {
+      isHandlingFocus = false;
+    }, 100);
+  }
+}
+
+function inputBlurHandler() {
+  // No actions on blur to avoid loops
 }
 
 // Initialize and set up periodic updates
@@ -1873,6 +1968,9 @@ function renderMobileView() {
     return;
   }
   
+  // Save current scroll position
+  const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+  
   mobileView.innerHTML = '';
   
   // Processes section header - more compact
@@ -1883,7 +1981,7 @@ function renderMobileView() {
   processesHeader.innerHTML = '<h2>Processes</h2>';
   mobileView.appendChild(processesHeader);
   
-  // Important change: Display processes in regular order (not reversed)
+  // Display processes in regular order (not reversed)
   state.processes.forEach((process, processIndex) => {
     const card = createProcessCard(process, processIndex);
     mobileView.appendChild(card);
@@ -1910,7 +2008,24 @@ function renderMobileView() {
     const recordedTimesCard = createRecordedTimesCard();
     mobileView.appendChild(recordedTimesCard);
   }
+  
+  // Simple touch handling that won't cause infinite loops
+  const allInputs = mobileView.querySelectorAll('input, select, textarea');
+  allInputs.forEach(input => {
+    // Remove any existing event listeners first to prevent duplicates
+    input.removeEventListener('touchstart', inputTouchHandler);
+    input.removeEventListener('focus', inputFocusHandler);
+    input.removeEventListener('blur', inputBlurHandler);
+    
+    // Add the new event listeners
+    input.addEventListener('touchstart', inputTouchHandler);
+  });
+  
+  // Restore scroll position
+  window.scrollTo(0, scrollPosition);
 }
+
+let isHandlingFocus = false;
 
 // Modify createProcessCard to display subprocesses in ascending order
 function createProcessCard(process, processIndex) {
@@ -2143,6 +2258,39 @@ function createSubprocessCard(process, processIndex, subprocess, subprocessIndex
   inputRow2.appendChild(column4);
   form.appendChild(inputRow2);
   
+
+  const allInputs = card.querySelectorAll('input, select');
+allInputs.forEach(input => {
+  // Remove preventDefault, just use stopPropagation
+  input.addEventListener('touchstart', function(e) {
+    e.stopPropagation(); // Prevent event bubbling
+    // Remove the preventDefault line
+  });
+  
+  // Optional: A simpler focus approach if needed
+  input.addEventListener('click', function() {
+    this.focus();
+  });
+});
+    
+    // Fix iOS focus issues
+    input.addEventListener('focus', function() {
+      // Scroll the element into view with some padding
+      const rect = this.getBoundingClientRect();
+      const scrollY = window.scrollY + rect.top - 150; // 150px padding above
+      window.scrollTo(0, scrollY);
+      
+      // Add class to body to prevent background scrolling
+      document.body.classList.add('input-focused');
+    });
+    
+    input.addEventListener('blur', function() {
+      // Remove the class when input loses focus
+      document.body.classList.remove('input-focused');
+    });
+  });
+
+
   // Remarks field
   const remarksField = document.createElement('div');
   remarksField.innerHTML = `
@@ -2491,6 +2639,14 @@ function showModal(title, content) {
   `;
   
   modal.style.display = 'block';
+  
+  // Focus any input with a simple approach that won't cause loops
+  setTimeout(() => {
+    const firstInput = modal.querySelector('input, select, textarea');
+    if (firstInput) {
+      firstInput.focus();
+    }
+  }, 300);
 }
 
 // Close modal
