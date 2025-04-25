@@ -26,6 +26,127 @@ window.addEventListener('resize', debounce(function() {
 }, 250)); // 250ms debounce time
 
 
+
+// Add this complete function to your script.js
+function fixMobileKeyboardIssues() {
+  // 1. Prevent any automatic scrolling that might cause focus loss
+  window.addEventListener('scroll', function(e) {
+    const activeElement = document.activeElement;
+    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'SELECT' || activeElement.tagName === 'TEXTAREA')) {
+      // Don't do anything that might interfere while an input has focus
+      e.stopPropagation();
+    }
+  }, true);
+  
+  // 2. Disable any automatic body class changes on input focus
+  const originalAddEventListener = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function(type, listener, options) {
+    if (type === 'focus' || type === 'blur') {
+      if (this.tagName === 'INPUT' || this.tagName === 'SELECT' || this.tagName === 'TEXTAREA') {
+        // Wrap the listener to ensure it doesn't cause issues
+        const wrappedListener = function(e) {
+          e.stopPropagation();
+          // Still call the original but prevent propagation
+          return listener.call(this, e);
+        };
+        return originalAddEventListener.call(this, type, wrappedListener, options);
+      }
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+  
+  // 3. Ensure form elements are properly sized for touch
+  const style = document.createElement('style');
+  style.textContent = `
+    @media (max-width: 768px) {
+      input, select, textarea {
+        font-size: 16px !important;
+        padding: 12px !important;
+        margin-bottom: 8px !important;
+        height: auto !important;
+        min-height: 44px !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      
+      /* Force the viewport to maintain its position */
+      body.has-keyboard-open {
+        position: fixed;
+        width: 100%;
+        height: var(--window-height);
+        overflow: hidden;
+      }
+      
+      /* Container for scrolling with keyboard open */
+      .scrollable-with-keyboard {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  
+  // 4. Override any existing focus/blur handlers
+  const allInputFields = document.querySelectorAll('input, select, textarea');
+  allInputFields.forEach(input => {
+    // Remove existing handlers
+    const clone = input.cloneNode(true);
+    input.parentNode.replaceChild(clone, input);
+    
+    // Add clean handlers
+    clone.addEventListener('focus', function() {
+      document.body.classList.add('has-keyboard-open');
+      document.documentElement.style.setProperty('--window-height', `${window.innerHeight}px`);
+      
+      // Ensure this element is properly visible
+      setTimeout(() => {
+        this.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }, 300);
+    });
+    
+    clone.addEventListener('blur', function() {
+      // Small delay to ensure we don't remove class too soon
+      setTimeout(() => {
+        if (document.activeElement.tagName !== 'INPUT' && 
+            document.activeElement.tagName !== 'SELECT' && 
+            document.activeElement.tagName !== 'TEXTAREA') {
+          document.body.classList.remove('has-keyboard-open');
+        }
+      }, 100);
+    });
+  });
+  
+  // 5. Wrap page content in scrollable container if not already
+  if (!document.querySelector('.scrollable-with-keyboard')) {
+    const container = document.querySelector('.container');
+    if (container) {
+      const parent = container.parentNode;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'scrollable-with-keyboard';
+      parent.insertBefore(wrapper, container);
+      wrapper.appendChild(container);
+    }
+  }
+}
+
+// Call this function after the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+  // Your existing initialization code
+
+  // Fix mobile keyboard issues
+  if (window.innerWidth <= 768) {
+    fixMobileKeyboardIssues();
+  }
+});
+
 function fixMobileInputs() {
   if (document.getElementById('mobile-input-fixes')) return;
   
