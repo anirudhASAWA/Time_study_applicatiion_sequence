@@ -282,6 +282,57 @@ function updateTimerButtonStates(processIndex, subprocessIndex) {
   });
 }
 
+function fixMobileInputs() {
+  if (document.getElementById('mobile-input-fixes')) return;
+  
+  // Add special styles for mobile inputs
+  const mobileInputStyle = document.createElement('style');
+  mobileInputStyle.id = 'mobile-input-fixes';
+  mobileInputStyle.textContent = `
+    /* Ensure inputs are properly interactive on mobile */
+    input, select, textarea {
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      font-size: 16px !important; /* Prevents iOS zoom on focus */
+      height: auto;
+      min-height: 44px;
+    }
+    
+    /* Increase contrast for better visibility */
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+      outline: none !important;
+    }
+    
+    /* Ensure the action bar stays at the bottom */
+    .mobile-action-bar {
+      bottom: 0 !important;
+      position: fixed !important;
+      z-index: 999 !important;
+    }
+    
+    /* Add padding to the bottom of the page to prevent inputs from being hidden */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 100px !important;
+      }
+    }
+  `;
+  document.head.appendChild(mobileInputStyle);
+  
+  // Apply global event listener once
+  document.addEventListener('touchstart', function(e) {
+    const target = e.target;
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+      // Just stop propagation to prevent other handlers from interfering
+      e.stopPropagation();
+    }
+  }, true);
+}
+
+
+
 // Function to create and update the storage indicator
 function updateStorageIndicator() {
   // Get storage data
@@ -3703,7 +3754,7 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
   // Initial viewport and interface setup
   updateViewportAndInterface();
-  
+  fixMobileInputs();
   // Monitor for orientation changes on mobile devices
   window.addEventListener('orientationchange', function() {
     setTimeout(function() {
