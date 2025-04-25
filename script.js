@@ -2260,18 +2260,13 @@ function createSubprocessCard(process, processIndex, subprocess, subprocessIndex
   
 
   const allInputs = card.querySelectorAll('input, select');
-allInputs.forEach(input => {
+  allInputs.forEach(input => {
   // Remove preventDefault, just use stopPropagation
   input.addEventListener('touchstart', function(e) {
     e.stopPropagation(); // Prevent event bubbling
     // Remove the preventDefault line
   });
-  
-  // Optional: A simpler focus approach if needed
-  input.addEventListener('click', function() {
-    this.focus();
   });
-});
     
     // Fix iOS focus issues
     input.addEventListener('focus', function() {
