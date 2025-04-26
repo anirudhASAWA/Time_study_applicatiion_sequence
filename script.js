@@ -1,4 +1,5 @@
-// Main application state
+
+//Main application state
 function debounce(func, wait) {
   let timeout;
   return function() {
