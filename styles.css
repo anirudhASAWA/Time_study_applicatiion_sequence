@@ -47,10 +47,8 @@
     font-weight: 500;
   }
   
-  /* Make sure the content doesn't shift when keyboard appears */
-  body.keyboard-open {
-    position: relative;
-    padding-bottom: 250px !important;
+  body.keyboard-active {
+    padding-bottom: 40vh !important;
     height: auto !important;
   }
   
@@ -86,6 +84,29 @@
   .subprocess-inputs {
     padding: 5px;
     border-radius: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Prevent iOS zoom */
+  input, select, textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+  
+  /* Add padding when keyboard is open */
+  body.keyboard-open {
+    padding-bottom: 250px !important;
+    height: auto !important;
+  }
+  
+  /* Improve focus visibility */
+  .subprocess-card input:focus,
+  .subprocess-card select:focus,
+  .subprocess-card textarea:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
+    background-color: #fff;
   }
 }
 
